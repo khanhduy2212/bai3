@@ -1,29 +1,166 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using bai3.Models;
+using bai3.Data;
 
 namespace bai3.Controllers
 {
     public class ProductController : Controller
     {
-        // Gia lap csdl Product
-        public static List<Product> products = new List<Product>()
-        {
-            new Product() { Id = 1, Name = "MacBook Pro M3", Price = 35000000, Description = "Laptop cao cấp Apple", CategoryId = 1 },
-            new Product() { Id = 2, Name = "iPhone 15 Pro", Price = 28000000, Description = "Điện thoại Apple", CategoryId = 2 },
-            new Product() { Id = 3, Name = "iPad Pro M2", Price = 20000000, Description = "Máy tính bảng Apple", CategoryId = 3 },
-        };
-
         // GET: ProductController
-        public ActionResult Index()
+        //public ActionResult Index()
+        //{
+        //    return View(DataSheet.products);
+        //}
+
+        //public ActionResult Index(string? searchString)
+        //{
+        //    var search = searchString?.Trim();
+        //    ViewData["SearchString"] = search;
+        //    var products = DataSheet.products.AsQueryable();
+        //    if (!string.IsNullOrEmpty(searchString))
+        //    {
+        //        products = products.Where(p => p.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase));
+        //    }
+        //    return View(products.Select(ToViewModel).ToList());
+        //}
+
+        //    public ActionResult Index(
+        //string? searchString,
+        //string? sortBy = "name",
+        //bool descending = false)
+        //    {
+        //        var search = searchString?.Trim();
+        //        var sort = sortBy?.Trim().ToLowerInvariant();
+
+        //        ViewData["SearchString"] = search;
+
+        //        IEnumerable<Product> products = DataSheet.products;
+
+        //        if (!string.IsNullOrEmpty(search))
+        //        {
+        //            products = products.Where(p =>
+        //                p.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        //        }
+
+        //        switch (sort)
+        //        {
+        //            case "id":
+        //                products = descending
+        //                    ? products.OrderByDescending(p => p.Id)
+        //                    : products.OrderBy(p => p.Id);
+        //                break;
+
+        //            case "price":
+        //                products = descending
+        //                    ? products.OrderByDescending(p => p.Price)
+        //                    : products.OrderBy(p => p.Price);
+        //                break;
+
+        //            case "description":
+        //                products = descending
+        //                    ? products.OrderByDescending(p => p.Description)
+        //                    : products.OrderBy(p => p.Description);
+        //                break;
+
+        //            case "categoryid":
+        //                products = descending
+        //                    ? products.OrderByDescending(p => p.CategoryId)
+        //                    : products.OrderBy(p => p.CategoryId);
+        //                break;
+
+        //            default:
+        //                sort = "name";
+        //                products = descending
+        //                    ? products.OrderByDescending(p => p.Name)
+        //                    : products.OrderBy(p => p.Name);
+        //                break;
+        //        }
+
+        //        ViewData["SortBy"] = sort;
+        //        ViewData["Descending"] = descending;
+
+        //        return View(products.Select(ToViewModel).ToList());
+        //    }
+
+        public ActionResult Index(
+string? searchString,
+string? sortBy = "name",
+bool descending = false,
+int page = 1)
         {
-            return View(products);
+            const int pageSize = 2;
+
+            var search = searchString?.Trim();
+            var sort = sortBy?.Trim().ToLowerInvariant();
+
+            ViewData["SearchString"] = search;
+
+            IEnumerable<Product> products = DataSheet.products;
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                products = products.Where(p =>
+                    p.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            switch (sort)
+            {
+                case "id":
+                    products = descending
+                        ? products.OrderByDescending(p => p.Id)
+                        : products.OrderBy(p => p.Id);
+                    break;
+
+                case "price":
+                    products = descending
+                        ? products.OrderByDescending(p => p.Price)
+                        : products.OrderBy(p => p.Price);
+                    break;
+
+                case "description":
+                    products = descending
+                        ? products.OrderByDescending(p => p.Description)
+                        : products.OrderBy(p => p.Description);
+                    break;
+
+                case "categoryid":
+                    products = descending
+                        ? products.OrderByDescending(p => p.CategoryId)
+                        : products.OrderBy(p => p.CategoryId);
+                    break;
+
+                default:
+                    sort = "name";
+                    products = descending
+                        ? products.OrderByDescending(p => p.Name)
+                        : products.OrderBy(p => p.Name);
+                    break;
+            }
+
+            var totalCount = products.Count();
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+            page = Math.Clamp(page, 1, totalPages);
+
+            ViewData["SortBy"] = sort;
+            ViewData["Descending"] = descending;
+            ViewData["Page"] = page;
+            ViewData["TotalPages"] = totalPages;
+
+            var pageProducts = products
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(ToViewModel)
+                .ToList();
+
+            return View(pageProducts);
         }
 
         // GET: ProductController/Details/5
         public ActionResult Details(int id)
         {
-            var product = products.FirstOrDefault(p => p.Id == id);
+            var product = DataSheet.products.FirstOrDefault(p => p.Id == id);
             if (product == null)
             {
                 return NotFound();
@@ -34,6 +171,7 @@ namespace bai3.Controllers
         // GET: ProductController/Create
         public ActionResult Create()
         {
+            ViewBag.Categories = new SelectList(DataSheet.categories, "Id", "Name");
             return View();
         }
 
@@ -42,19 +180,25 @@ namespace bai3.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Create(Product product)
         {
-            product.Id = products.Count + 1;
-            products.Add(product);
-            return RedirectToAction(nameof(Index));
+            if (ModelState.IsValid)
+            {
+                product.Id = DataSheet.products.Any() ? DataSheet.products.Max(p => p.Id) + 1 : 1;
+                DataSheet.products.Add(product);
+                return RedirectToAction(nameof(Index));
+            }
+            ViewBag.Categories = new SelectList(DataSheet.categories, "Id", "Name", product.CategoryId);
+            return View(product);
         }
 
         // GET: ProductController/Edit/5
         public ActionResult Edit(int id)
         {
-            var EditProduct = products.FirstOrDefault(p => p.Id == id);
+            var EditProduct = DataSheet.products.FirstOrDefault(p => p.Id == id);
             if (EditProduct == null)
             {
                 return NotFound();
             }
+            ViewBag.Categories = new SelectList(DataSheet.categories, "Id", "Name", EditProduct.CategoryId);
             return View(EditProduct);
         }
 
@@ -63,7 +207,7 @@ namespace bai3.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Edit(Product product)
         {
-            var existingProduct = products.FirstOrDefault(p => p.Id == product.Id);
+            var existingProduct = DataSheet.products.FirstOrDefault(p => p.Id == product.Id);
             if (existingProduct == null)
             {
                 return NotFound();
@@ -79,7 +223,7 @@ namespace bai3.Controllers
         // GET: ProductController/Delete/5
         public ActionResult Delete(int id)
         {
-            var product = products.FirstOrDefault(p => p.Id == id);
+            var product = DataSheet.products.FirstOrDefault(p => p.Id == id);
             if (product == null)
             {
                 return NotFound();
@@ -92,13 +236,27 @@ namespace bai3.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult DeleteConfirmed(int id)
         {
-            var product = products.FirstOrDefault(p => p.Id == id);
+            var product = DataSheet.products.FirstOrDefault(p => p.Id == id);
             if (product == null)
             {
                 return NotFound();
             }
-            products.Remove(product);
+            DataSheet.products.Remove(product);
             return RedirectToAction(nameof(Index));
+        }
+
+        private static ProductViewModel ToViewModel(Product product)
+        {
+            return new ProductViewModel
+            {
+                Id = product.Id,
+                Name = product.Name,
+                Price = product.Price,
+                Description = product.Description,
+                CategoryId = product.CategoryId,
+                CategoryName = DataSheet.categories
+        .FirstOrDefault(c => c.Id == product.CategoryId)?.Name ?? string.Empty
+            };
         }
     }
 }
